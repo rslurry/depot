@@ -11,8 +11,9 @@ import mapbox_vector_tile
 import duckdb
 import geopandas as gpd
 import pandas as pd
-from shapely import wkb
-from shapely.geometry import shape, mapping
+from shapely import wkb, set_precision
+from shapely.ops import unary_union, orient
+from shapely.geometry import shape, mapping, box, Polygon, MultiPolygon
 
 
 class MapGen:
@@ -661,6 +662,10 @@ class MapGen:
         tile_pbf = zlib.decompress(data, 16 + zlib.MAX_WBITS)
         decoded = mapbox_vector_tile.decode(tile_pbf)
         new_layers_data = {}
+        # Temporary storage for water geometries to be dissolved
+        water_geoms_to_dissolve = []
+        water_id_map = [] # List of tuples: (id, geometry)
+        tile_bounds = box(0, 0, 4096, 4096)
 
         for layer_name, layer_content in decoded.items():
             is_bldg_layer = 'building' in layer_name.lower()
@@ -671,38 +676,41 @@ class MapGen:
                     old_props.get('aeroway') or old_props.get('class') or ""
                 )
                 
-                is_aeroway_path = (kind == 'aeroway' or 
-                                   'runway' in str(old_props).lower() or 
-                                   'taxiway' in str(old_props).lower())
-                
-                water_kinds = ['ocean', 'water', 'river', 'canal', 
+                water_kinds = ['ocean', 'river', 'canal', 'drain',
                                'swimming_pool', 'lake', 'cenote', 'lagoon',
                                'oxbow', 'rapids', 'stream', 'stream_pool',
-                               'basin', 'canal', 'pond', 'reflecting_pool',
+                               'canal', 'pond', 'reflecting_pool',
                                'reservoir']
 
-                if kind in water_kinds or old_props.get('class') == 'water':
+                if kind in water_kinds:
                     dest = "water"
                     final_kind = kind
                     final_rank = rank
                     
+                    geom = shape(feature['geometry'])
+                    
                     # Turn linestrings into polygons:
                     if 'LineString' in feature['geometry']['type']:
-                        geom = shape(feature['geometry'])
                         target_meters = 10
                         extent = 4096
                         meters_per_tile = 40075016.686 / (2**z)
                         units_per_meter = extent / meters_per_tile
-                        dynamic_buffer = (target_meters / 2) * units_per_meter
-                        safe_buffer = max(dynamic_buffer, 3.0)
-                        buffered = geom.buffer(safe_buffer, cap_style=2)
-                        if not buffered.is_empty:
-                            if buffered.geom_type == 'Polygon':
-                                new_coords = [list(buffered.exterior.coords)]
+                        target_buffer = (target_meters / 2) * units_per_meter
+                        safe_buffer = max(target_buffer, 4.0)
+                        geom = geom.buffer(safe_buffer, cap_style=2)
+                        if not geom.is_empty:
+                            if geom.geom_type == 'Polygon':
+                                new_coords = [list(geom.exterior.coords)]
                             else:
-                                new_coords = [list(p.exterior.coords) for p in buffered.geoms]
+                                new_coords = [list(p.exterior.coords) for p in geom.geoms]
                             feature['geometry']['coordinates'] = new_coords
                             feature['geometry']['type'] = 'Polygon'
+                    if not geom.is_empty:
+                        if not geom.is_valid:
+                            geom = geom.buffer(0)
+                        water_geoms_to_dissolve.append(geom)
+                        water_id_map.append((feature.get('id'), geom))
+                    continue # These features will be added after the loop
                 elif (kind == 'aeroway' or \
                       'runway' in str(old_props).lower() or \
                       'taxiway' in str(old_props).lower()):
@@ -732,7 +740,64 @@ class MapGen:
                     "id": feature.get('id'), 
                     "type": feature.get('type')
                 })
-
+        
+        # Handle water features
+        if water_geoms_to_dissolve:
+            snapped_geoms = [set_precision(g, grid_size=0.1) \
+                             for g in water_geoms_to_dissolve]
+            
+            # Union with a tiny "fusion" buffer
+            merged_result = unary_union([g.buffer(0.5) for g in snapped_geoms])
+            merged_result = merged_result.buffer(-0.5) # Shrink back
+            
+            # Snap to integer grid
+            merged_result = set_precision(merged_result, grid_size=1.0)
+            
+            # Fix self-intersections caused by grid snapping
+            if not merged_result.is_valid:
+                merged_result = merged_result.buffer(0)
+            merged_result = merged_result.intersection(tile_bounds)
+            
+            # Explode MultiPolygons into individual Polygon features
+            final_parts = []
+            if isinstance(merged_result, Polygon):
+                final_parts.append(merged_result)
+            elif isinstance(merged_result, MultiPolygon):
+                final_parts.extend(list(merged_result.geoms))
+            elif hasattr(merged_result, 'geoms'):
+                for g in merged_result.geoms:
+                    if isinstance(g, Polygon):
+                        final_parts.append(g)
+                    elif isinstance(g, MultiPolygon):
+                        final_parts.extend(list(g.geoms))
+            
+            if "water" not in new_layers_data:
+                new_layers_data["water"] = []
+            
+            for part in final_parts:
+                if part.is_empty or part.area < 0.01:
+                    continue
+                # Ensure exterior is CCW/CW as per spec
+                part = orient(part, sign=1.0)
+                # Find which original IDs belong to this new dissolved 'part'
+                # We use a small negative buffer (ebbing) to ensure the 
+                # centroid or intersection is truly inside the new part.
+                associated_ids = []
+                for orig_id, orig_geom in water_id_map:
+                    if part.intersects(orig_geom):
+                        associated_ids.append(orig_id)
+                
+                # Determine the primary ID (using the first one found)
+                primary_id = associated_ids[0] if associated_ids else None
+                
+                water_feat = {
+                    "geometry": mapping(part),
+                    "properties": {"kind": "water", "sort_rank": 200},
+                    "type": "Polygon"
+                }
+                if primary_id is not None:
+                    water_feat["id"] = primary_id
+                new_layers_data["water"].append(water_feat)
         layers_to_encode = []
         for name, feats in new_layers_data.items():
             if not feats: continue
