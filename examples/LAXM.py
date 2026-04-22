@@ -1,6 +1,6 @@
 import sys, os
 import numpy as np
-from sb_utils.maps import MapGen
+from depot.maps import MapGen
 import requests
 
 # Download the .osm.pbf file we need

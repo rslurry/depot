@@ -3,8 +3,8 @@ requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "sb_utils"
-version = "0.1.0"
+name = "depot"
+version = "0.2.0"
 description = "A collection of utilities for modding Subway Builder."
 dependencies = [
     "requests>=2.25.1",

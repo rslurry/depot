@@ -1,4 +1,4 @@
-## sb_utils: a Python library of map-making utilities for Subway Builder
+## depot: a Python library of map-making utilities for Subway Builder
 
 ## Requirements
 This library is confirmed to work with the following Python package versions:
@@ -36,7 +36,7 @@ available within your path to create the non-demand files needed for custom maps
 * [planetiler.jar](https://github.com/onthegomap/planetiler/releases)
 
 These must be executable (even `planetiler.jar` despite that .jar files are not executable) 
-so that `sb_utils` can determine that they are available.  The code will not run if any of 
+so that `depot` can determine that they are available.  The code will not run if any of 
 these requirements are missing.
 
 ## Installation
@@ -46,7 +46,7 @@ In the repo directory, run
 
 ## Usage
 
-At present, sb_utils includes the ability to create the non-demand files for 
+At present, `depot` includes the ability to create the non-demand files for 
 custom maps.  This is handled through the `MapGen` class.
 
 ### `MapGen` inputs

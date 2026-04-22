@@ -1,4 +1,4 @@
-name: sb_utils
+name: depot
 channels:
   - conda-forge
 dependencies:

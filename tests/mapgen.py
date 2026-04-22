@@ -2,7 +2,7 @@ import sys, os
 import unittest
 from unittest.mock import patch
 import numpy as np
-from sb_utils.maps import MapGen
+from depot.maps import MapGen
 
 class TestMapGen(unittest.TestCase):
 
