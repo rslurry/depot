@@ -61,6 +61,8 @@ class MapGen:
     def __init__(self, city, bbox, osmpbf=None, outputdir='.', 
                        building_index_filter_size=40, 
                        building_tile_filter_size=None, 
+                       building_index_simplification=1,
+                       building_tile_simplification=1,
                        cities=None, suburbs=None, neighborhoods=None,
                        buildings_geojson=None, redownload_buildings=False, 
                        ncores=1, RAM=4, cleanup_files=True, verb=True):
@@ -88,6 +90,15 @@ class MapGen:
                          at the highest zooms.  Must be >= building_index_filter_size.
                          If None, uses `building_index_filter_size`.
                          Default: None
+        building_index_simplification: int or float. Minimum distance in 
+                                meters between building nodes.  Higher values 
+                                reduce buildings_index.json file size at the 
+                                cost of reduced accuracy.  Be careful to not 
+                                use too large of a value.
+                                Default: 1
+        building_tile_simplification: int or float. Like 
+                                `building_index_simplification`, but for the 
+                                buildings in the pmtiles file.
         cities: list of str. OSM 'place' values to show at the lowest zooms.
                              If None, labels will not be created for that zoom.
         suburbs: list of str. Like cities, but for medium zooms.
@@ -145,6 +156,10 @@ class MapGen:
                              f"({self.building_tile_filter_size}) cannot be "
                              f"larger than building_index_filter_size "
                              f"({self.building_index_filter_size})")
+        
+        # Building simplifications
+        self.building_index_simplification = building_index_simplification
+        self.building_tile_simplification  = building_tile_simplification
         
         # Labels
         self.cities = cities
@@ -459,8 +474,8 @@ class MapGen:
             f"node --max-old-space-size={self.RAM} $(which mapshaper) "
             f"{self.buildings_geojson} -proj {self.epsg} -snap 0.5 -clean "
             f"-filter 'this.area > {self.building_index_filter_size}' "
-            f"-simplify dp interval=2 -proj wgs84 "
-            f"-o precision=0.00001 {cleaned_json}"
+            f"-simplify dp interval={self.building_index_simplification} "
+            f"-proj wgs84 -o precision=0.00001 {cleaned_json}"
         )
         self._run_command(mapshaper_cmd)
 
@@ -594,7 +609,7 @@ class MapGen:
             os.remove(clean_mbtiles)
         
 
-        # 4. Building Overlays (z12, 13, and 14+)
+        # 4. Building Overlays
         self._generate_building_tiles()
 
         # 5. Merge buildings
@@ -898,7 +913,7 @@ class MapGen:
         mapshaper and tippecanoe.
         """
         if self.verb:
-            print("***** Generating Building Overlays (z12, z13, z14+) *****")
+            print("***** Generating Building Overlays *****")
         
         # Paths for intermediate files
         self.buildings_mbtiles = os.path.join(self.city_dir, "buildings.mbtiles")
@@ -911,8 +926,8 @@ class MapGen:
             f"node --max-old-space-size={self.RAM} $(which mapshaper) "
             f"{self.buildings_geojson} -proj {self.epsg} -snap 0.5 "
             f"-filter 'this.area > {self.building_index_filter_size}' -clean "
-            f"-simplify dp interval=1 -proj wgs84 "
-            f"-o precision=0.00001 {self.buildings_zoom_geojson}"
+            f"-simplify dp interval={self.building_tile_simplification} "
+            f"-proj wgs84 -o precision=0.00001 {self.buildings_zoom_geojson}"
         )
         self._run_command(mapshaper_cmd)
         
