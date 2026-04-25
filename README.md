@@ -1,6 +1,10 @@
 ## depot: a Python library of map-making utilities for Subway Builder
 
 ## Requirements
+You need a shell.  If you're on Windows, you must use WSL.  Well, maybe there is a way 
+to get it to work without WSL, but I will make no effort to support that, so good luck 
+if you try that.
+
 This library is confirmed to work with the following Python package versions:
 | Package            | Version       |
 | ------------------ |:-------------:|
