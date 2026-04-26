@@ -12,8 +12,10 @@ if not os.path.exists('socal-latest.osm.pbf'):
 # Set up MapGen object
 obj = MapGen(city='LAXM', bbox=[-118.66816, 33.70200, -117.96758, 34.33162],
              osmpbf='socal-latest.osm.pbf',
-             building_filter_size=180, z13_limit=200, z12_limit=200, ncores=16,
-             RAM=12, 
+             building_index_filter_size=180, building_tile_filter_size=50, 
+             building_index_simplification=4,
+             building_tile_simplification=1,
+             ncores=16, RAM=8, 
              cities = ['city', 'borough', 'town'],
              suburbs = ['suburb', 'village'],
              neighborhoods = ['neighbourhood', 'hamlet', 'quarter', 'locality'])
