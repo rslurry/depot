@@ -5,6 +5,8 @@ import requests
 
 # Download the .osm.pbf file we need
 if not os.path.exists('socal-latest.osm.pbf'):
+    url = 'https://download.geofabrik.de/north-america/us/california/socal-latest.osm.pbf'
+    print("Downloading", url, flush=True)
     resp = requests.get('https://download.geofabrik.de/north-america/us/california/socal-latest.osm.pbf')
     with open('socal-latest.osm.pbf', 'wb') as f:
         f.write(resp.content)
