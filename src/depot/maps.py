@@ -1252,6 +1252,54 @@ class MapGen:
         self._osmpbf = value
     
     @property
+    def building_index_filter_size(self):
+        return self._building_index_filter_size
+        
+    @building_index_filter_size.setter
+    def building_index_filter_size(self, value):
+        if not isinstance(value, (int, float)):
+            raise TypeError(f"building_index_filter_size must be numeric, not {type(value).__name__}")
+        elif value < 0:
+            raise ValueError(f"building_index_filter_size must be >= 0.\nReceived {value}")
+        self._building_index_filter_size = value
+    
+    @property
+    def building_tile_filter_size(self):
+        return self._building_tile_filter_size
+    
+    @building_tile_filter_size.setter
+    def building_tile_filter_size(self, value):
+        if not isinstance(value, (int, float)):
+            raise TypeError(f"building_tile_filter_size must be numeric, not {type(value).__name__}")
+        elif value < 0:
+            raise ValueError(f"building_tile_filter_size must be >= 0.\nReceived {value}")
+        self._building_tile_filter_size = value
+    
+    @property
+    def building_index_simplification(self):
+        return self._building_index_simplification
+    
+    @building_index_simplification.setter
+    def building_index_simplification(self, value):
+        if not isinstance(value, (int, float)):
+            raise TypeError(f"building_index_simplification must be numeric, not {type(value).__name__}")
+        elif value < 0:
+            raise ValueError(f"building_index_simplification must be >= 0.\nReceived {value}")
+        self._building_index_simplification = value
+    
+    @property
+    def building_tile_simplification(self):
+        return self._building_tile_simplification
+    
+    @building_tile_simplification.setter
+    def building_tile_simplification(self, value):
+        if not isinstance(value, (int, float)):
+            raise TypeError(f"building_tile_simplification must be numeric, not {type(value).__name__}")
+        elif value < 0:
+            raise ValueError(f"building_tile_simplification must be >= 0.\nReceived {value}")
+        self._building_tile_simplification = value
+    
+    @property
     def outputdir(self):
         return self._outputdir
 
