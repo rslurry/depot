@@ -947,7 +947,7 @@ class MapGen:
         Sets default building height for buildings geojson file
         """
         # Load the data
-        with open(self.buildings_geojson, 'r') as f:
+        with open(self.buildings_zoom_geojson, 'r') as f:
             data = json.load(f)
 
         # Add the field if missing
@@ -969,7 +969,7 @@ class MapGen:
                     props['height'] = float(default_height)
         
         # Overwrite it it
-        with open(self.buildings_geojson, 'w') as f:
+        with open(self.buildings_zoom_geojson, 'w') as f:
             json.dump(data, f)
     
     def _update_mbtiles_metadata(self, mbtiles_path):
