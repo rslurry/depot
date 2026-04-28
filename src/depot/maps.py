@@ -568,17 +568,9 @@ class MapGen:
         final_pmtiles = os.path.join(self.city_dir, self.city+"-nolabels.pmtiles")
 
         # 1. Planetiler
-        planetiler_path = shutil.which("planetiler.jar")
-        if not planetiler_path:
-            # Fallback check: maybe it's called 'planetiler' in some setups
-            planetiler_path = shutil.which("planetiler")
-        if not planetiler_path:
-            raise RuntimeError("Could not find planetiler.jar in PATH. "
-                  "Please ensure it is installed or in the current directory.")
-        
         bounds_str = ",".join(map(str, self.bbox))
         self._run_command([
-            "java", "-Xmx16g", "-jar", planetiler_path,
+            "java", "-Xmx16g", "-jar", self.planetiler_path,
             f"--osm-path={city_pbf}", 
             f"--output={raw_mbtiles}",
             f"--bounds={bounds_str}",
@@ -1002,7 +994,14 @@ class MapGen:
         """
         missing = []
         for tool in self.REQUIRED_BINS:
-            if shutil.which(tool) is None:
+            if tool == 'planetiler.jar':
+                self.planetiler_path = shutil.which("planetiler.jar", mode=os.F_OK)
+                if not self.planetiler_path:
+                    # Maybe it's called 'planetiler' in some setups
+                    self.planetiler_path = shutil.which("planetiler", mode=os.F_OK)
+                    if not self.planetiler_path:
+                        missing.append(tool)
+            elif shutil.which(tool) is None:
                 missing.append(tool)
         
         if missing:
