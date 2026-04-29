@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "depot"
-version = "1.0.0"
+version = "1.0.1"
 description = "A collection of utilities for modding Subway Builder."
 dependencies = [
     "requests>=2.25.1",
@@ -12,3 +12,9 @@ dependencies = [
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.package-data]
+"*" = ["*.json"]
