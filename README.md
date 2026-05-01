@@ -73,6 +73,7 @@ custom maps.  This is handled through the `MapGen` class.
 | `suburbs`             | list of str. Like cities, but for medium zooms. Default: None         |
 | `neighborhoods`             | list of str. Like cities, but for the highest zooms. Default: None         |
 | `places_suffix`             | str. Suffix to add after the `place` tag when pulling labels from OSM. For example, if using Chinese labels, set this to "CN" to pull from `place:CN`. Default: "" |
+| `label_name_language`             | str or None. Controls which name field is used for label text. Use `prefer:<lang>` to try `name:<lang>` first and fall back to `name`, or `force:<lang>` to use only `name:<lang>`. Default: None |
 | `buildings_geojson`                | str or None. If a string, path to a buildings.geojson file to use as input. If None, fetches Overture buildings. Default: None |
 | `redownload_buildings`             | bool. Determines whether to re-fetch buildings (True) or load previously-saved buildings if available (False). Default: False        |
 | `ncores`             | int. Number of cores to use when processing tiles in parallel. Setting this to None will use all available cores. Default: 1         |

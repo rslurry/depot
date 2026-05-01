@@ -63,7 +63,8 @@ class MapGen:
                        building_tile_filter_size=None, 
                        building_index_simplification=1,
                        building_tile_simplification=1,
-                       cities=None, suburbs=None, neighborhoods=None, places_suffix="",
+                       cities=None, suburbs=None, neighborhoods=None,
+                       places_suffix="", label_name_language=None,
                        buildings_geojson=None, redownload_buildings=False, 
                        ncores=1, RAM=4, cleanup_files=True, verb=True):
         """
@@ -107,6 +108,11 @@ class MapGen:
                             labels from OSM. Must be a two-letter ISO code.  
                             For example, if using Chinese labels, set this to 
                             "CN" to pull from `place:CN`.
+        label_name_language: str or None. Controls which OSM name field is 
+                            used for label text. Use "prefer:<lang>" to try
+                            `name:<lang>` first and fall back to `name`, or
+                            "force:<lang>" to use only `name:<lang>`.
+                            If None, uses `name`.
         buildings_geojson: str. Path to buildings.geojson file to use.
                                 If provided, Overture buildings will not be 
                                 downloaded.
@@ -169,6 +175,7 @@ class MapGen:
         self.cities = cities
         self.suburbs = suburbs
         self.neighborhoods = neighborhoods
+        self.label_name_language = label_name_language
 
         if (len(places_suffix)==2 or (len(places_suffix)==3 and places_suffix[0]==':')):
             self.places_suffix = places_suffix.replace(':', '')
@@ -1099,6 +1106,7 @@ class MapGen:
             self._run_command(filter_cmd)
             self._run_command(["osmium", "export", str(osm_pbf), "-o", 
                                str(geojson), "--overwrite"])
+            self._rewrite_label_geojson_names(geojson)
             
             geojson_paths[name] = str(geojson)
             
@@ -1160,6 +1168,34 @@ class MapGen:
         if not all(isinstance(item, str) for item in val):
             raise TypeError(f"All items in the {name} list must be strings.")
         return val
+
+    def _rewrite_label_geojson_names(self, geojson_path):
+        """Normalizes feature properties.name based on label_name_language."""
+        if self._label_name_mode == "default":
+            return
+
+        with open(geojson_path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+
+        for feature in data.get('features', []):
+            properties = feature.get('properties')
+            if not isinstance(properties, dict):
+                continue
+            feature['properties']['name'] = self._select_label_name(properties)
+
+        with open(geojson_path, 'w', encoding='utf-8') as f:
+            json.dump(data, f)
+
+    def _select_label_name(self, properties):
+        """Returns the label text to store in properties.name."""
+        default_name = properties.get('name', '')
+        lang_name = properties.get(f"name:{self._label_name_suffix}", '')
+
+        if self._label_name_mode == "prefer":
+            return lang_name if lang_name not in [None, ""] else default_name
+        if self._label_name_mode == "force":
+            return lang_name if lang_name not in [None, ""] else ""
+        return default_name
 
     ##### Properties (city, bbox, osmpbf, outputdir) #####
     
@@ -1399,3 +1435,27 @@ class MapGen:
     @neighborhoods.setter
     def neighborhoods(self, value):
         self._neighborhoods = self._validate_places("neighborhoods", value)
+
+    @property
+    def label_name_language(self):
+        return self._label_name_language
+
+    @label_name_language.setter
+    def label_name_language(self, value):
+        if value is None:
+            self._label_name_language = None
+            self._label_name_mode = "default"
+            self._label_name_suffix = None
+            return
+
+        if not isinstance(value, str):
+            raise TypeError("label_name_language must be a string or None.")
+
+        parts = value.split(":", 1)
+        if len(parts) != 2 or parts[0] not in ["prefer", "force"] or parts[1] == "":
+            raise ValueError("label_name_language must be None or a string in the form 'prefer:<lang>' or 'force:<lang>'. "
+                             f"Received: {value}")
+
+        self._label_name_language = value
+        self._label_name_mode = parts[0]
+        self._label_name_suffix = parts[1]
