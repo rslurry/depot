@@ -65,6 +65,7 @@ class MapGen:
                        building_tile_simplification=1,
                        cities=None, suburbs=None, neighborhoods=None,
                        places_suffix="", label_name_language=None,
+                       road_name_preferred_language=None,
                        buildings_geojson=None, redownload_buildings=False, 
                        ncores=1, RAM=4, cleanup_files=True, verb=True):
         """
@@ -113,6 +114,11 @@ class MapGen:
                             `name:<lang>` first and fall back to `name`, or
                             "force:<lang>" to use only `name:<lang>`.
                             If None, uses `name`.
+        road_name_preferred_language: str or None. Preferred OSM language
+                            code to use for road names in roads.geojson.
+                            If set to `en`, roads will use `name:en` when
+                            available and fall back to `name`. If None, uses
+                            `name`.
         buildings_geojson: str. Path to buildings.geojson file to use.
                                 If provided, Overture buildings will not be 
                                 downloaded.
@@ -176,6 +182,7 @@ class MapGen:
         self.suburbs = suburbs
         self.neighborhoods = neighborhoods
         self.label_name_language = label_name_language
+        self.road_name_preferred_language = road_name_preferred_language
 
         if (len(places_suffix)==2 or (len(places_suffix)==3 and places_suffix[0]==':')):
             self.places_suffix = places_suffix.replace(':', '')
@@ -534,7 +541,7 @@ class MapGen:
             'structure: (if .properties.bridge then "bridge" '
                       'elif .properties.tunnel then "tunnel" '
                       'else "normal" end), '
-            'name: (.properties.name // "")}, geometry: .geometry})'
+            f'name: ({self._get_road_name_jq_expression()})}}, geometry: .geometry}})'
         )
         self._apply_jq(roads_geojson, jq_roads)
         
@@ -1197,6 +1204,13 @@ class MapGen:
             return lang_name if lang_name not in [None, ""] else ""
         return default_name
 
+    def _get_road_name_jq_expression(self):
+        """Returns the jq expression used to populate roads.geojson name."""
+        if self.road_name_preferred_language is None:
+            return '.properties.name // ""'
+        return (f'.properties["name:{self.road_name_preferred_language}"] '
+                '// .properties.name // ""')
+
     ##### Properties (city, bbox, osmpbf, outputdir) #####
     
     @property
@@ -1459,3 +1473,24 @@ class MapGen:
         self._label_name_language = value
         self._label_name_mode = parts[0]
         self._label_name_suffix = parts[1]
+
+    @property
+    def road_name_preferred_language(self):
+        return self._road_name_preferred_language
+
+    @road_name_preferred_language.setter
+    def road_name_preferred_language(self, value):
+        if value is None:
+            self._road_name_preferred_language = None
+            return
+
+        if not isinstance(value, str):
+            raise TypeError("road_name_preferred_language must be a string or None.")
+
+        value = value.strip()
+        if value == "":
+            raise ValueError("road_name_preferred_language cannot be empty.")
+        if ":" in value:
+            raise ValueError("road_name_preferred_language should be only the OSM language code suffix, not a full key like 'name:en'.")
+
+        self._road_name_preferred_language = value
