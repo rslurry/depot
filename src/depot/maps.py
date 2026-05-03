@@ -63,9 +63,10 @@ class MapGen:
                        building_tile_filter_size=None, 
                        building_index_simplification=1,
                        building_tile_simplification=1,
-                       cities=None, suburbs=None, neighborhoods=None,
-                       places_suffix="", label_name_language=None,
+                       max_building_tile_size=450,
+                       cities=None, suburbs=None, neighborhoods=None, places_suffix="",
                        buildings_geojson=None, redownload_buildings=False, 
+                       color_military_like_aerodrome=True,
                        ncores=1, RAM=4, cleanup_files=True, verb=True):
         """
         Inputs
@@ -73,9 +74,11 @@ class MapGen:
         city: str. 2-4 character city code.
         bbox: list of floats. Bounding box for the map.
                             [min_lon, min_lat, max_lon, max_lat]
-        osmpbf: str. Path to local .osm.pbf file to use as a source.
+        osmpbf: str, or list of str. Path to local .osm.pbf file to use as a 
+                     source. If the map's area spans multiple .osm.pbf files, 
+                     pass them as a list of paths to each file.
                      If None, will fetch the data online (NOT YET IMPLEMENTED,
-                     YOU MUST PROVIDE A LOCAL .OSM.PBF FILE).
+                     YOU MUST PROVIDE AT LEAST ONE LOCAL .OSM.PBF FILE).
                      Default: None
         outputdir: str. Path to output directory. Within the 
                         specified directory, a new directory named 
@@ -100,6 +103,11 @@ class MapGen:
         building_tile_simplification: int or float. Like 
                                 `building_index_simplification`, but for the 
                                 buildings in the pmtiles file.
+        max_building_tile_size: int. Maximum size per tile in KB when 
+                                considering only buildings. The absolute 
+                                maximum per tile is 500, which includes 
+                                buildings, rivers, roads, and more.
+                                Default: 450
         cities: list of str. OSM 'place' values to show at the lowest zooms.
                              If None, labels will not be created for that zoom.
         suburbs: list of str. Like cities, but for medium zooms.
@@ -108,11 +116,6 @@ class MapGen:
                             labels from OSM. Must be a two-letter ISO code.  
                             For example, if using Chinese labels, set this to 
                             "CN" to pull from `place:CN`.
-        label_name_language: str or None. Controls which OSM name field is 
-                            used for label text. Use "prefer:<lang>" to try
-                            `name:<lang>` first and fall back to `name`, or
-                            "force:<lang>" to use only `name:<lang>`.
-                            If None, uses `name`.
         buildings_geojson: str. Path to buildings.geojson file to use.
                                 If provided, Overture buildings will not be 
                                 downloaded.
@@ -122,6 +125,11 @@ class MapGen:
                                     buildings (True) or load previously-saved
                                     buildings if available (False).
                                     Default: False
+        color_military_like_aerodrome: bool. If True, military bases are 
+                                       colored on the map the same as airports.
+                                       If False, it looks like any other 
+                                       ordinary tile.
+                                       Default: True
         ncores: int. Number of cores to use when processing tiles in parallel.
                      Setting this to None will use all available cores.
                      Default: 1
@@ -144,14 +152,23 @@ class MapGen:
         # Load user params
         self.city = city
         self.bbox = bbox
+        self.outputdir = outputdir
         if osmpbf is None:
             raise ValueError("Received osmpbf=None. In the future, this will "
                         "fetch from Overpass, but it is not yet implemented. "
                         "Specify a local .osm.pbf file.")
+        self.osmpbf_sources = osmpbf
         self.osmpbf = osmpbf
-        self.outputdir = outputdir
+        if isinstance(osmpbf, list):
+            if len(osmpbf) > 1:
+                # Multiple .osm.pbf files that need to be merged
+                self._merge_osmpbf_files()
+            else:
+                self.osmpbf = osmpbf[0]
+        
         self.buildings_geojson = buildings_geojson
         self.REFETCH_BUILDINGS = bool(redownload_buildings)
+        self.color_military_like_aerodrome = bool(color_military_like_aerodrome)
         self.ncores = ncores
         self.RAM = RAM # Multiplied by 1000 in the setter to convert GB -> MB
         self.cleanup_files = bool(cleanup_files)
@@ -171,11 +188,15 @@ class MapGen:
         self.building_index_simplification = building_index_simplification
         self.building_tile_simplification  = building_tile_simplification
         
+        if max_building_tile_size > 500 or max_building_tile_size < 100:
+            raise ValueError("`max_building_tile_size` must be >=100 and "
+                            f"<=500.\nReceived: {max_building_tile_size}")
+        self.max_building_tile_size = int(max_building_tile_size) * 1000
+        
         # Labels
         self.cities = cities
         self.suburbs = suburbs
         self.neighborhoods = neighborhoods
-        self.label_name_language = label_name_language
 
         if (len(places_suffix)==2 or (len(places_suffix)==3 and places_suffix[0]==':')):
             self.places_suffix = places_suffix.replace(':', '')
@@ -190,7 +211,7 @@ class MapGen:
             print("------------------------------")
             print(f"city                : {self.city}")
             print(f"bbox                : {self.bbox}")
-            print(f"osmpbf              : {self.osmpbf}")
+            print(f"osmpbf source files : {self.osmpbf_sources}")
             print(f"redownload_buildings: {self.REFETCH_BUILDINGS}")
             print(f"building_index_filter_size: {self.building_index_filter_size} m2")
             print(f"building_tile_filter_size : {self.building_tile_filter_size} m2")
@@ -218,6 +239,15 @@ class MapGen:
                            cwd=cwd)#, capture_output=True, text=True)
         except subprocess.CalledProcessError as e:
             raise RuntimeError(f"Command failed: {cmd}\nError: {e.stderr}")
+    
+    def _merge_osmpbf_files(self):
+        """Merges multiple input .osm.pbf files into one."""
+        merged_osmpbf = os.path.join(self.city_dir, f"{self.city.lower()}-merged-source.osm.pbf")
+        osmium_cmd = ["osmium", "merge"]
+        osmium_cmd.extend(self.osmpbf)
+        osmium_cmd.extend(["-o", merged_osmpbf])
+        self._run_command(osmium_cmd)
+        self.osmpbf = merged_osmpbf
     
     def extract_base_data(self):
         """
@@ -615,13 +645,12 @@ class MapGen:
         
         if self.cleanup_files:
             os.remove(clean_mbtiles)
-        
 
         # 4. Building Overlays
         self._generate_building_tiles()
 
         # 5. Merge buildings
-        self._update_mbtiles_metadata(fixed_mbtiles)
+        #self._update_mbtiles_metadata(fixed_mbtiles)
         self._update_mbtiles_metadata(self.buildings_mbtiles)
         
         self._run_command([
@@ -667,8 +696,7 @@ class MapGen:
         with open(filepath, 'w') as f:
             json.dump(data, f)
     
-    @staticmethod
-    def _get_kind_and_rank(val):
+    def _get_kind_and_rank(self, val):
         """
         Helper to map OSM/Planetiler tags to game-engine specific kinds and 
         ranks.
@@ -688,14 +716,14 @@ class MapGen:
         if any(x in v for x in ['park', 'nature_reserve', 'cemetery', 'pitch', 
                                 'zoo', 'grass', 'wood']):
             return 'park', None, priority['park']
-        if 'aerodrome' in v or 'military' in v:
+        if 'aerodrome' in v or \
+           ('military' in v and self.color_military_like_aerodrome):
             return 'aerodrome', None, priority['aerodrome']
         if 'scrub' in v:
             return 'scrub', None, priority['scrub']
         return v, None, 0
 
-    @staticmethod
-    def _process_tile_worker(tile_tuple):
+    def _process_tile_worker(self, tile_tuple):
         """
         Worker function to handle vector tile re-mapping.
         """
@@ -713,7 +741,7 @@ class MapGen:
             for feature in layer_content['features']:
                 old_props = feature.get('properties', {})
                 # Use class method logic via static access
-                kind, detail, rank = MapGen._get_kind_and_rank(
+                kind, detail, rank = self._get_kind_and_rank(
                     old_props.get('aeroway') or old_props.get('class') or ""
                 )
                 
@@ -880,7 +908,7 @@ class MapGen:
                   f"cores...")
         
         with ProcessPoolExecutor(max_workers=self.ncores) as executor:
-            results = list(executor.map(MapGen._process_tile_worker, 
+            results = list(executor.map(self._process_tile_worker, 
                                         all_tiles))
 
         # Setup output database
@@ -946,6 +974,7 @@ class MapGen:
         tippe_cmd = [
             "tippecanoe", "-o", self.buildings_mbtiles,
             "--layer=buildings", "--include=height", "--drop-smallest-as-needed",
+            f"--maximum-tile-bytes={self.max_building_tile_size}", 
             "-Z12", "-z15", self.buildings_zoom_geojson, "--force"
         ]
         self._run_command(tippe_cmd)
@@ -1103,10 +1132,10 @@ class MapGen:
             # e.g., "n/place=city n/place=borough"
             filter_cmd.extend([f"n/place{self.places_suffix}={t}" for t in tags])
             filter_cmd.extend(["-o", str(osm_pbf), "--overwrite"])
+            print(filter_cmd)
             self._run_command(filter_cmd)
             self._run_command(["osmium", "export", str(osm_pbf), "-o", 
                                str(geojson), "--overwrite"])
-            self._rewrite_label_geojson_names(geojson)
             
             geojson_paths[name] = str(geojson)
             
@@ -1168,34 +1197,6 @@ class MapGen:
         if not all(isinstance(item, str) for item in val):
             raise TypeError(f"All items in the {name} list must be strings.")
         return val
-
-    def _rewrite_label_geojson_names(self, geojson_path):
-        """Normalizes feature properties.name based on label_name_language."""
-        if self._label_name_mode == "default":
-            return
-
-        with open(geojson_path, 'r', encoding='utf-8') as f:
-            data = json.load(f)
-
-        for feature in data.get('features', []):
-            properties = feature.get('properties')
-            if not isinstance(properties, dict):
-                continue
-            feature['properties']['name'] = self._select_label_name(properties)
-
-        with open(geojson_path, 'w', encoding='utf-8') as f:
-            json.dump(data, f)
-
-    def _select_label_name(self, properties):
-        """Returns the label text to store in properties.name."""
-        default_name = properties.get('name', '')
-        lang_name = properties.get(f"name:{self._label_name_suffix}", '')
-
-        if self._label_name_mode == "prefer":
-            return lang_name if lang_name not in [None, ""] else default_name
-        if self._label_name_mode == "force":
-            return lang_name if lang_name not in [None, ""] else ""
-        return default_name
 
     ##### Properties (city, bbox, osmpbf, outputdir) #####
     
@@ -1280,15 +1281,28 @@ class MapGen:
             self._osmpbf = None
             return
 
-        if not isinstance(value, str):
-            raise TypeError("osmpbf path must be a string or None.")
-
-        if not os.path.exists(value):
-            raise ValueError(f"The path provided for osmpbf does not exist: "
-                             f"{value}")
-        
-        if not value.lower().endswith('.osm.pbf'):
-            raise ValueError("The osmpbf file must have a .osm.pbf extension.")
+        if isinstance(value, str):
+            if not os.path.exists(value):
+                raise ValueError(f"The path provided for osmpbf does not exist: "
+                                 f"{value}")
+            if not value.lower().endswith('.osm.pbf'):
+                raise ValueError("The osmpbf file must have a .osm.pbf extension."
+                                f"\nReceived: {value}")
+        elif isinstance(value, list):
+            for v in value:
+                if not isinstance(v, str):
+                    raise TypeError("When osmpbf is a list, it must be a list of strings."
+                                   f"\nReceived element of type {type(v)}")
+                if not os.path.exists(v):
+                    raise ValueError(f"The path provided for osmpbf does not exist: "
+                                     f"{v}")
+                if not v.lower().endswith('.osm.pbf'):
+                    raise ValueError("The osmpbf file must have a .osm.pbf extension."
+                                    f"\nReceived: {v}")
+        else:
+            # Not a string or list of strings
+            raise TypeError("osmpbf must be a string, list of strings, or None."
+                           f"\nReceived type {type(value)}")
 
         self._osmpbf = value
     
@@ -1435,27 +1449,3 @@ class MapGen:
     @neighborhoods.setter
     def neighborhoods(self, value):
         self._neighborhoods = self._validate_places("neighborhoods", value)
-
-    @property
-    def label_name_language(self):
-        return self._label_name_language
-
-    @label_name_language.setter
-    def label_name_language(self, value):
-        if value is None:
-            self._label_name_language = None
-            self._label_name_mode = "default"
-            self._label_name_suffix = None
-            return
-
-        if not isinstance(value, str):
-            raise TypeError("label_name_language must be a string or None.")
-
-        parts = value.split(":", 1)
-        if len(parts) != 2 or parts[0] not in ["prefer", "force"] or parts[1] == "":
-            raise ValueError("label_name_language must be None or a string in the form 'prefer:<lang>' or 'force:<lang>'. "
-                             f"Received: {value}")
-
-        self._label_name_language = value
-        self._label_name_mode = parts[0]
-        self._label_name_suffix = parts[1]
