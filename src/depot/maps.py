@@ -64,6 +64,7 @@ class MapGen:
                        building_tile_filter_size=None, 
                        building_index_simplification=1,
                        building_tile_simplification=1,
+                       max_building_tile_size=450,
                        cities=None, suburbs=None, neighborhoods=None,
                        places_suffix="", label_name_language=None,
                        buildings_geojson=None, redownload_buildings=False, 
@@ -104,6 +105,11 @@ class MapGen:
         building_tile_simplification: int or float. Like 
                                 `building_index_simplification`, but for the 
                                 buildings in the pmtiles file.
+        max_building_tile_size: int. Maximum size per tile in KB when 
+                                considering only buildings. The absolute 
+                                maximum per tile is 500, which includes 
+                                buildings, rivers, roads, and more.
+                                Default: 450
         cities: list of str. OSM 'place' values to show at the lowest zooms.
                              If None, labels will not be created for that zoom.
         suburbs: list of str. Like cities, but for medium zooms.
@@ -187,7 +193,13 @@ class MapGen:
         # Building simplifications
         self.building_index_simplification = building_index_simplification
         self.building_tile_simplification  = building_tile_simplification
-        
+
+        # Maximum size per tile for buildings
+        if max_building_tile_size > 500 or max_building_tile_size < 100:
+            raise ValueError("`max_building_tile_size` must be >=100 and "
+                            f"<=500.\nReceived: {max_building_tile_size}")
+        self.max_building_tile_size = int(max_building_tile_size) * 1000
+                           
         # Labels
         self.cities = cities
         self.suburbs = suburbs
@@ -973,6 +985,7 @@ class MapGen:
         tippe_cmd = [
             "tippecanoe", "-o", self.buildings_mbtiles,
             "--layer=buildings", "--include=height", "--drop-smallest-as-needed",
+            f"--maximum-tile-bytes={self.max_building_tile_size}", 
             "-Z12", "-z15", self.buildings_zoom_geojson, "--force"
         ]
         self._run_command(tippe_cmd)

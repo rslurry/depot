@@ -69,6 +69,7 @@ custom maps.  This is handled through the `MapGen` class.
 | `building_tile_filter_size`      | int. Filters buildings below this size (in m^2) for pmtiles. Must be <= `building_index_filter_size`.  If None, it is set to `building_index_filter_size`. Default: None         |
 | `building_index_simplification`  | int or float. Minimum distance in meters between building nodes.  Higher values reduce buildings_index.json file size at the cost of reduced accuracy.  Be careful to not use too large of a value. Default: 1 |
 | `building_tile_simplification`   | int or float. Like `building_index_simplification`, but for the buildings in the pmtiles file. |
+| `max_building_tile_size`         | int. Maximum size per tile in KB when considering only buildings. The absolute maximum per tile is 500, which includes buildings, rivers, roads, and more. Default: 450  |
 | `cities`           | list of str. OSM 'place' values to show at the lowest zooms. If None, labels will not be created for that zoom. Default: None         |
 | `suburbs`          | list of str. Like cities, but for medium zooms. Default: None         |
 | `neighborhoods`    | list of str. Like cities, but for the highest zooms. Default: None         |
