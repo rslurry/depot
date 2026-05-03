@@ -26,6 +26,7 @@ class MapGen:
     -------
     run_all : Runs all steps to make map files.
     _run_command : Helper to run shell commands safely.
+    _merge_osmpbf_files : Merges multiple input .osm.pbf files into one.
     extract_base_data : osmium extract for base layers.
     _convert_to_game_format : Converts GeoJSON buildings into a spatial grid-
                               indexed JSON for the game engine.
@@ -227,6 +228,15 @@ class MapGen:
                            cwd=cwd)#, capture_output=True, text=True)
         except subprocess.CalledProcessError as e:
             raise RuntimeError(f"Command failed: {cmd}\nError: {e.stderr}")
+
+    def _merge_osmpbf_files(self):
+        """Merges multiple input .osm.pbf files into one."""
+        merged_osmpbf = os.path.join(self.city_dir, f"{self.city.lower()}-merged-source.osm.pbf")
+        osmium_cmd = ["osmium", "merge"]
+        osmium_cmd.extend(self.osmpbf)
+        osmium_cmd.extend(["-o", merged_osmpbf])
+        self._run_command(osmium_cmd)
+        self.osmpbf = merged_osmpbf
     
     def extract_base_data(self):
         """
