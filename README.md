@@ -63,7 +63,7 @@ custom maps.  This is handled through the `MapGen` class.
 | ------------------ |:-------------:|
 | `city`             | str. 2-4 character city code.        |
 | `bbox`             | list of floats. Bounding box for the map. [min_lon, min_lat, max_lon, max_lat]         |
-| `osmpbf`          | str. Path to local .osm.pbf file to use as a source. Obtain it from <https://download.geofabrik.de/>        |
+| `osmpbf`          | str or list of str. Path(s) to local .osm.pbf file(s) to use as a source. Obtain them from <https://download.geofabrik.de/>        |
 | `outputdir` | str. Path to output directory. Within the specified directory, a new directory named `city` will be created to hold all outputs and intermediate files. Defaults to the current directory. Default: current working directory         |
 | `building_index_filter_size`              | int. Filters buildings below this size (in m^2) for collisions. Default: 40         |
 | `building_tile_filter_size`               | int. Filters buildings below this size (in m^2) for pmtiles. Must be <= `building_index_filter_size`.  If None, it is set to `building_index_filter_size`. Default: None         |
