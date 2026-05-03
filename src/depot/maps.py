@@ -67,6 +67,7 @@ class MapGen:
                        cities=None, suburbs=None, neighborhoods=None,
                        places_suffix="", label_name_language=None,
                        buildings_geojson=None, redownload_buildings=False, 
+                       color_military_like_aerodrome=True,
                        ncores=1, RAM=4, cleanup_files=True, verb=True):
         """
         Inputs
@@ -125,6 +126,11 @@ class MapGen:
                                     buildings (True) or load previously-saved
                                     buildings if available (False).
                                     Default: False
+        color_military_like_aerodrome: bool. If True, military bases are 
+                                       colored on the map the same as airports.
+                                       If False, it looks like any other 
+                                       ordinary tile.
+                                       Default: True
         ncores: int. Number of cores to use when processing tiles in parallel.
                      Setting this to None will use all available cores.
                      Default: 1
@@ -162,6 +168,7 @@ class MapGen:
                 self.osmpbf = osmpbf[0]
         self.buildings_geojson = buildings_geojson
         self.REFETCH_BUILDINGS = bool(redownload_buildings)
+        self.color_military_like_aerodrome = bool(color_military_like_aerodrome)
         self.ncores = ncores
         self.RAM = RAM # Multiplied by 1000 in the setter to convert GB -> MB
         self.cleanup_files = bool(cleanup_files)
@@ -707,7 +714,8 @@ class MapGen:
         if any(x in v for x in ['park', 'nature_reserve', 'cemetery', 'pitch', 
                                 'zoo', 'grass', 'wood']):
             return 'park', None, priority['park']
-        if 'aerodrome' in v or 'military' in v:
+        if 'aerodrome' in v or \
+           ('military' in v and self.color_military_like_aerodrome):
             return 'aerodrome', None, priority['aerodrome']
         if 'scrub' in v:
             return 'scrub', None, priority['scrub']
