@@ -73,9 +73,11 @@ class MapGen:
         city: str. 2-4 character city code.
         bbox: list of floats. Bounding box for the map.
                             [min_lon, min_lat, max_lon, max_lat]
-        osmpbf: str. Path to local .osm.pbf file to use as a source.
+        osmpbf: str, or list of str. Path to local .osm.pbf file to use as a 
+                     source. If the map's area spans multiple .osm.pbf files, 
+                     pass them as a list of paths to each file.
                      If None, will fetch the data online (NOT YET IMPLEMENTED,
-                     YOU MUST PROVIDE A LOCAL .OSM.PBF FILE).
+                     YOU MUST PROVIDE AT LEAST ONE LOCAL .OSM.PBF FILE).
                      Default: None
         outputdir: str. Path to output directory. Within the 
                         specified directory, a new directory named 
@@ -144,12 +146,19 @@ class MapGen:
         # Load user params
         self.city = city
         self.bbox = bbox
+        self.outputdir = outputdir
         if osmpbf is None:
             raise ValueError("Received osmpbf=None. In the future, this will "
                         "fetch from Overpass, but it is not yet implemented. "
                         "Specify a local .osm.pbf file.")
+        self.osmpbf_sources = osmpbf
         self.osmpbf = osmpbf
-        self.outputdir = outputdir
+        if isinstance(osmpbf, list):
+            if len(osmpbf) > 1:
+                # Multiple .osm.pbf files that need to be merged
+                self._merge_osmpbf_files()
+            else:
+                self.osmpbf = osmpbf[0]
         self.buildings_geojson = buildings_geojson
         self.REFETCH_BUILDINGS = bool(redownload_buildings)
         self.ncores = ncores
@@ -190,7 +199,7 @@ class MapGen:
             print("------------------------------")
             print(f"city                : {self.city}")
             print(f"bbox                : {self.bbox}")
-            print(f"osmpbf              : {self.osmpbf}")
+            print(f"osmpbf source files : {self.osmpbf_sources}")
             print(f"redownload_buildings: {self.REFETCH_BUILDINGS}")
             print(f"building_index_filter_size: {self.building_index_filter_size} m2")
             print(f"building_tile_filter_size : {self.building_tile_filter_size} m2")
@@ -1280,15 +1289,28 @@ class MapGen:
             self._osmpbf = None
             return
 
-        if not isinstance(value, str):
-            raise TypeError("osmpbf path must be a string or None.")
-
-        if not os.path.exists(value):
-            raise ValueError(f"The path provided for osmpbf does not exist: "
-                             f"{value}")
-        
-        if not value.lower().endswith('.osm.pbf'):
-            raise ValueError("The osmpbf file must have a .osm.pbf extension.")
+        if isinstance(value, str):
+            if not os.path.exists(value):
+                raise ValueError(f"The path provided for osmpbf does not exist: "
+                                 f"{value}")
+            if not value.lower().endswith('.osm.pbf'):
+                raise ValueError("The osmpbf file must have a .osm.pbf extension."
+                                f"\nReceived: {value}")
+        elif isinstance(value, list):
+            for v in value:
+                if not isinstance(v, str):
+                    raise TypeError("When osmpbf is a list, it must be a list of strings."
+                                   f"\nReceived element of type {type(v)}")
+                if not os.path.exists(v):
+                    raise ValueError(f"The path provided for osmpbf does not exist: "
+                                     f"{v}")
+                if not v.lower().endswith('.osm.pbf'):
+                    raise ValueError("The osmpbf file must have a .osm.pbf extension."
+                                    f"\nReceived: {v}")
+        else:
+            # Not a string or list of strings
+            raise TypeError("osmpbf must be a string, list of strings, or None."
+                           f"\nReceived type {type(value)}")
 
         self._osmpbf = value
     
