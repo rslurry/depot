@@ -712,8 +712,7 @@ class MapGen:
         with open(filepath, 'w') as f:
             json.dump(data, f)
     
-    @staticmethod
-    def _get_kind_and_rank(val):
+    def _get_kind_and_rank(self, val):
         """
         Helper to map OSM/Planetiler tags to game-engine specific kinds and 
         ranks.
@@ -740,8 +739,7 @@ class MapGen:
             return 'scrub', None, priority['scrub']
         return v, None, 0
 
-    @staticmethod
-    def _process_tile_worker(tile_tuple):
+    def _process_tile_worker(self, tile_tuple):
         """
         Worker function to handle vector tile re-mapping.
         """
@@ -758,8 +756,7 @@ class MapGen:
             is_bldg_layer = 'building' in layer_name.lower()
             for feature in layer_content['features']:
                 old_props = feature.get('properties', {})
-                # Use class method logic via static access
-                kind, detail, rank = MapGen._get_kind_and_rank(
+                kind, detail, rank = self._get_kind_and_rank(
                     old_props.get('aeroway') or old_props.get('class') or ""
                 )
                 
@@ -926,7 +923,7 @@ class MapGen:
                   f"cores...")
         
         with ProcessPoolExecutor(max_workers=self.ncores) as executor:
-            results = list(executor.map(MapGen._process_tile_worker, 
+            results = list(executor.map(self._process_tile_worker, 
                                         all_tiles))
 
         # Setup output database
