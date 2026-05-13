@@ -56,6 +56,8 @@ class MapGen:
     check_labels : Checks city.osm.pbf and reports the types and counts of places.
     add_labels : Extraction and tiling for labels. 
     _validate_places : Ensures cities/suburbs/neighborhoods are valid entries.
+    _validate_additional_places : Ensures additional cities/suburbs/
+                                  neighborhoods are valid entries.
     """
     REQUIRED_BINS = ['node', 'mapshaper', 'osmium', 'java', 'tile-join', 
                      'tippecanoe', 'sqlite3', 'jq', 'pmtiles', 
@@ -67,6 +69,8 @@ class MapGen:
                        building_tile_simplification=1,
                        max_building_tile_size=450,
                        cities=None, suburbs=None, neighborhoods=None,
+                       cities_additional=None, suburbs_additional=None, 
+                       neighborhoods_additional=None, 
                        places_suffix="", label_name_language=None,
                        road_name_preferred_language=None,
                        buildings_geojson=None, redownload_buildings=False, 
@@ -116,6 +120,12 @@ class MapGen:
                              If None, labels will not be created for that zoom.
         suburbs: list of str. Like cities, but for medium zooms.
         neighborhoods: list of str. Like cities, but for the highest zooms.
+        cities_additional: str. Path/to/geojson file that contains label features 
+                             to be shown at the lowest zoom levels.
+                             If None, it is not used.
+                             Default: None
+        suburbs_additional: str. Like cities_additional, but for medium zooms.
+        neighborhoods_additional: str. Like cities_additional, but for the highest zooms.
         places_suffix: str. Suffix to add after the `place` tag when pulling 
                             labels from OSM. Must be a two-letter ISO code.  
                             For example, if using Chinese labels, set this to 
@@ -211,6 +221,11 @@ class MapGen:
         self.cities = cities
         self.suburbs = suburbs
         self.neighborhoods = neighborhoods
+        
+        self.cities_additional = cities_additional
+        self.suburbs_additional = suburbs_additional
+        self.neighborhoods_additional = neighborhoods_additional
+
         self.label_name_language = label_name_language
         self.road_name_preferred_language = road_name_preferred_language
 
@@ -1097,7 +1112,8 @@ class MapGen:
         """Checks city.osm.pbf and reports the types and counts of places."""
         places_osmpbf = os.path.join(self.city_dir, "places.osm.pbf")
         places_geojson = os.path.join(self.city_dir, "places.geojson")
-        self._run_command(["osmium", "tags-filter", self.osmpbf, "n/place", 
+        self._run_command(["osmium", "tags-filter", self.osmpbf, 
+                           f"n/place{self.places_suffix}", 
                            "-o", places_osmpbf, "--overwrite"])
         
         self._run_command(["osmium", "export", places_osmpbf, "-o", 
@@ -1164,6 +1180,14 @@ class MapGen:
                                str(geojson), "--overwrite"])
             self._rewrite_label_geojson_names(geojson)
             
+            # Combine with additional labels, if provided
+            if name == "cities" and self.cities_additional:
+                self._combine_geojson_labels(geojson, self.cities_additional)
+            elif name == "suburbs" and self.suburbs_additional:
+                self._combine_geojson_labels(geojson, self.suburbs_additional)
+            elif name == "neighborhoods" and self.neighborhoods_additional:
+                self._combine_geojson_labels(geojson, self.neighborhoods_additional)
+            
             geojson_paths[name] = str(geojson)
             
             if self.cleanup_files:
@@ -1210,6 +1234,27 @@ class MapGen:
             print(f"***** Done. Final pmtiles created at: *****")
             print(f"    {final_output}")
     
+    def _combine_geojson_labels(self, main_labels, addtl_labels):
+        """Merge user labels into OSM labels"""
+        files = [main_labels, addtl_labels]
+        combined_features = []
+
+        # Load features from each file
+        for file in files:
+            with open(file, 'r') as f:
+                data = json.load(f)
+                # GeoJSON files are typically 'FeatureCollection' types
+                combined_features.extend(data['features'])
+
+        combined_geojson = {
+            "type": "FeatureCollection",
+            "features": combined_features
+        }
+
+        # Overwrite the main_labels
+        with open(main_labels, 'w') as f:
+            json.dump(combined_geojson, f)
+    
     def _validate_places(self, name, val):
         """Ensures cities/suburbs/neighborhoods are valid entries."""
         if val is None:
@@ -1223,6 +1268,14 @@ class MapGen:
         # Check for mixed types within the list
         if not all(isinstance(item, str) for item in val):
             raise TypeError(f"All items in the {name} list must be strings.")
+        return val
+    
+    def _validate_additional_places(self, name, val):
+        """Ensures additional cities/suburbs/neighborhoods are valid entries."""
+        if val is None:
+            return None
+        if not os.path.exists(val):
+            raise FileNotFoundError(f"Specified {name} file not found:\n"+val)
         return val
 
     def _rewrite_label_geojson_names(self, geojson_path):
@@ -1510,6 +1563,30 @@ class MapGen:
     @neighborhoods.setter
     def neighborhoods(self, value):
         self._neighborhoods = self._validate_places("neighborhoods", value)
+    
+    @property
+    def cities_additional(self):
+        return self._cities_additional
+
+    @cities_additional.setter
+    def cities_additional(self, value):
+        self._cities_additional = self._validate_additional_places("cities_additional", value)
+
+    @property
+    def suburbs_additional(self):
+        return self._suburbs_additional
+
+    @suburbs_additional.setter
+    def suburbs_additional(self, value):
+        self._suburbs_additional = self._validate_additional_places("suburbs_additional", value)
+
+    @property
+    def neighborhoods_additional(self):
+        return self._neighborhoods_additional
+
+    @neighborhoods_additional.setter
+    def neighborhoods_additional(self, value):
+        self._neighborhoods_additional = self._validate_additional_places("neighborhoods_additional", value)
 
     @property
     def label_name_language(self):
